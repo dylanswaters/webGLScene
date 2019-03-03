@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>CS 4280: Computer Graphics</title>
+  <style>
+    canvas { border: 1px solid white; }
+    .column { float: left;}
+    .row:after {content: ""; display: table; clear: both;}
+    .left { width: 70%;}
+    .right { width: 30%; }
+    ul { list-style: none; width: 100%; padding-left: 0px;}
+    ul li { float: left; width: 50%;}
+    ul li.label:before {content: "   "; white-space: pre;}
+    br{ clear: left; }
+  </style>
+</head>
+
+<body>
+  <div class="row">
+    <div class="column left">
+      <canvas id="webgl-scene" width="800" height="800">
+        Your browser does not support HTML5.
+      </canvas>
+    </div>
+    <div class="column right" style="font-family: courier;">
+      <h2>Controls</h2>
+      <ul>
+        <li class="header"><strong>Light Position</strong> [-1, 1]</li><li>&nbsp;</li>
+        <li class="label">X</li>
+        <li><input type="range" data-var="lposX" value="1" min="-1" max="1" step=".1"></li>
+        <li class="label">Y</li>
+        <li><input type="range" data-var="lposY" value="1" min="-1" max="1" step=".1"></li>
+        <li class="label">Z</li>
+        <li><input type="range" data-var="lposZif(object[i] = object[0]){
+            colorify(object[])
+          }" value="1" min="-1" max="1" step=".1"></li>
+
+        <li class="header"><strong>Coefficients</strong> [0, 1]</li><li>&nbsp;</li>
+        <li class="label">Ka</li>
+        <li><input type="range" data-var="ka" value="1" min="0" max="1" step=".05"></li>
+        <li class="label">Kd</li>
+        <li><input type="range" data-var="kd" value="1" min="0" max="1" step=".05"></li>
+        <li class="label">Ks</li>
+        <li><input type="range" data-var="ks" value="1" min="0" max="1" step=".05"></li>
+        <li class="header"><strong>Shininess</strong>  [0, 500]</li><li>&nbsp;</li>
+        <li class="label">&nbsp;</li>
+        <li><input type="range" data-var="shininess" value="100" min="0" max="500" step="5"></li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.4.0/gl-matrix-min.js"></script>
+  <script src="webgl_helper.js"></script>
+  <script src="chesttop.js"></script>
+  <script src="cube.js"></script>
+
+  <script src="chestbot.js"></script>
+  <script src="treeTrunk.js"></script>
+  <script src="sphere.js"></script>
+  <script src="leaf.js"></script>
+  <!-- Vertex Shader -->
+  <script id='shader-vs' type='x-shader/x-vertex'>
+    attribute vec3 coordinates;
+    attribute vec3 normals;
+    attribute vec2 texCoords;
+
+    uniform mat4 modelView;
+    uniform mat4 projection;
+
+    varying vec4 vVertPos;
+    varying vec4 vNormals;
+    varying vec2 fTexCoords;
+    void main(void) {
+      gl_Position = projection * modelView * vec4(coordinates, 1.0);
+      vVertPos = modelView * vec4(coordinates, 1.0);
+      vNormals = modelView * vec4(normals, 0.0);
+      fTexCoords = texCoords;
+    }
+  </script>
+  <!-- Fragment Shader -->
+  <script id='shader-fs' type='x-shader/x-fragment'>
+    precision mediump float;
+    varying vec4 vVertPos;
+    varying vec4 vNormals;
+    varying vec2 fTexCoords;
+
+    uniform vec3 lightPosition;
+    uniform vec3 coefficients;
+    uniform float shininess;
+
+    uniform vec3 ambientColor;
+    uniform vec3 diffuseColor;
+    uniform vec3 specularColor;
+
+    uniform sampler2D texture;
+    uniform float textured;
+    void main(void) {
+      vec3 vertPos = vVertPos.xyz;
+      vec3 N = normalize(vNormals.xyz);
+      vec3 L = normalize(lightPosition - vertPos);
+
+      float lambertian = max(dot(N, L), 0.0);
+      float specTerm = 0.0;
+
+      if(lambertian > 0.0) {
+        vec3 R = reflect(-L, N);
+        vec3 V = normalize(-vertPos);
+
+        specTerm = pow(max(dot(R, V), 0.0), shininess);
+      }
+
+      float Ka = coefficients.x;
+      float Kd = coefficients.y;
+      float Ks = coefficients.z;
+      vec4 shadedColor = vec4(Ka * ambientColor +
+                          Kd * lambertian * diffuseColor +
+                          Ks * specTerm * specularColor, 1.0);
+      if(textured == 1.0){
+        gl_FragColor = shadedColor * texture2D(texture, fTexCoords);
+      }else{
+        gl_FragColor = shadedColor;
+      }
+    }
+  </script>
+
+  <script>
+    $(document).ready(function(){
+      var controls = {
+        lposX: 1,
+        lposY: 1,
+        lposZ: 1,
+        ambient: [.2, 0, .2],
+        diffuse: [1, .8, 0],
+        specular: [1, .8, 0],
+        ka: 1,
+        kd: 1,
+        ks: 1,
+        shininess: 100
+      };
+
+      $("input").on("click change", function(){
+        switch($(this).attr('type')){
+        case "color":
+          controls[this.dataset.var] = getColorFromHex(this.value);
+          console.log(this.color)
+          break;
+        case "range":
+          controls[this.dataset.var] = parseFloat(this.value);
+          break;
+      }});
+
+      var canvas = $("#webgl-scene")[0];
+      var gl = initWebGL(canvas);
+      var program = initShaders(gl, $("#shader-vs").text(), $("#shader-fs").text());
+      gl.useProgram(program);
+      clear(gl, [1.0, 1.0, 1.0, 1.0]);
+
+      var objects = [
+        cube(),
+        //chesttop(0.1, 128, 128),
+        sphere(.6, 128, 128),
+        treeTrunk(0.07, 64, 64),
+        chestbottom(),chesttop(0.1, 64, 64),
+        leaf1(), leaf2(), leaf3(), leaf4(),
+        sphere2(0.1, 128, 128)
+      ];
+      console.log(objects[0].vertices.length);
+      //console.log(objects[1].vertices.length);
+
+      var theta = [];
+      var buffers = [];
+      for(var i = 0; i < objects.length; i++){
+        buffers.push(initBuffers(gl, program, [{
+            name: "coordinates",
+            size: 3,
+            data: objects[i].vertices
+          }, {
+            name: "normals",
+            size: 3,
+            data: objects[i].normals
+          }, {
+            name: "texCoords",
+            size: 2,
+            data: objects[i].texCoords
+          }
+        ]));
+
+        theta.push(0);
+      }
+
+      var textures = loadTexturesFromUrls(gl, program, [{
+        url: "Sand.jpg",
+        sampler2D: [gl.TEXTURE0, "texture", 0]
+      },{
+        url: "BeachBall.jpg",
+        sampler2D: [gl.TEXTURE0, "texture", 0]
+      }
+      ]);
+
+      var modelViewLoc = gl.getUniformLocation(program, "modelView");
+      var projectionLoc = gl.getUniformLocation(program, "projection");
+      var ambientColorLoc = gl.getUniformLocation(program, "ambientColor");
+      var diffuseColorLoc = gl.getUniformLocation(program, "diffuseColor");
+      var specularColorLoc = gl.getUniformLocation(program, "specularColor");
+      var lightPositionLoc = gl.getUniformLocation(program, "lightPosition");
+      var coefficientsLoc = gl.getUniformLocation(program, "coefficients");
+      var shininessLoc = gl.getUniformLocation(program, "shininess");
+      var texturedLoc = gl.getUniformLocation(program, "textured");
+      //console.log(objects.length);
+
+      function animate(time){
+        for(var i = 0; i < objects.length; i++){
+          var fSize = Float32Array.BYTES_PER_ELEMENT;
+          for(const attr in buffers[i]){
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers[i][attr]);
+            var attribute = gl.getAttribLocation(program, attr);
+            gl.vertexAttribPointer(attribute, (attr === "texCoords" ? 2 : 3), gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(attribute);
+            if(i == 1){
+              gl.bindTexture(gl.TEXTURE_2D, textures[0]);
+            }else if(i == 9){
+              gl.bindTexture(gl.TEXTURE_2D, textures[1]);
+            }
+
+          }
+
+          theta[i] += objects[i].theta;
+          var t = mat4.fromTranslation(mat4.create(), objects[i].translate);
+          var s = mat4.fromScaling(mat4.create(), objects[i].scale);
+          var st = mat4.mul(mat4.create(), s, t);
+          var r = mat4.fromRotation(mat4.create(), glMatrix.toRadian(theta[i]), objects[i].axis);
+          var model = mat4.mul(mat4.create(), r, st);
+
+          var view = mat4.lookAt(mat4.create(), objects[i].eye, objects[i].at, objects[i].up);
+          var projection = mat4.ortho (mat4.create(), objects[i].ortho[0], objects[i].ortho[1],
+            objects[i].ortho[2], objects[i].ortho[3], objects[i].ortho[4], objects[i].ortho[5]);
+
+          gl.uniformMatrix4fv(modelViewLoc, false, mat4.mul(mat4.create(), view, model));
+          gl.uniformMatrix4fv(projectionLoc, false, projection);
+
+          if(i == 0){ //sea
+            gl.uniform1f(texturedLoc, 0);
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("0DDFF6")));
+          }else if(i == 1){ //beach
+            gl.uniform1f(texturedLoc, 1);
+
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("FFFFFF")));
+          }else if( i == 5 || i == 6 || i == 7 || i == 8){ //leaves
+            gl.uniform1f(texturedLoc, 0);
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("486800")));
+          }else if(i == 9){ //beach ball
+            gl.uniform1f(texturedLoc, 1);
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("FFFFFF")));
+          }else if(i == 2){
+            gl.uniform1f(texturedLoc, 0);
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("735011")));
+          }else if(i == 3){
+            gl.uniform1f(texturedLoc, 0);
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("4E3404")));
+          }else if(i == 4){
+            gl.uniform1f(texturedLoc, 0);
+            gl.uniform3fv(ambientColorLoc, new Float32Array(getColorFromHex("5D4C39")));
+          }
+
+          gl.uniform3fv(diffuseColorLoc, new Float32Array(getColorFromHex("B59494")));
+          gl.uniform3fv(specularColorLoc, new Float32Array(getColorFromHex("000000")));
+
+          //gl.uniform3fv(ambientColorLoc, new Float32Array(controls.ambient));
+
+          gl.uniform3f(lightPositionLoc, controls.lposX, controls.lposY, controls.lposZ);
+          gl.uniform1f(shininessLoc, controls.shininess);
+          gl.uniform3f(coefficientsLoc, controls.ka, controls.kd, controls.ks);
+
+          gl.drawArrays(gl.TRIANGLES, 0, objects[i].vertices.length / 3);
+        }
+
+        window.requestAnimationFrame(animate);
+      }
+
+      animate(0);
+    });
+  </script>
+</body>
+</html>

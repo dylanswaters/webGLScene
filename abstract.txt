@@ -1,0 +1,11 @@
+Dylan Waters
+Final Project Abstract
+
+For my final project, I wish thinking of modeling a simple island, having the
+camera rotate around the island. I was thinking of having a tree and maybe some
+other scenery, such as a beach ball or treasure chest, with a possible small
+animation with these objects. Then, in the back ground,birds will fly around.
+All the models will use textures.
+
+The water will be animated with ripples and this will probably take the longest
+time of the project. 
